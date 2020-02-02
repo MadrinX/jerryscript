@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+#include <math.h>
+
 #include "ecma-alloc.h"
 #include "ecma-builtins.h"
 #include "ecma-conversion.h"
@@ -24,7 +26,6 @@
 #include "ecma-objects.h"
 #include "ecma-try-catch-macro.h"
 #include "jrt.h"
-#include "math.h"
 
 #if ENABLED (JERRY_BUILTIN_NUMBER)
 
@@ -92,7 +93,8 @@ ecma_builtin_number_dispatch_construct (const ecma_value_t *arguments_list_p, /*
   }
 } /* ecma_builtin_number_dispatch_construct */
 
-#if ENABLED (JERRY_ES2015_BUILTIN)
+#if ENABLED (JERRY_ES2015)
+
 /**
  * The Number object 'isFinite' routine
  *
@@ -172,7 +174,8 @@ ecma_builtin_number_object_is_integer (ecma_value_t this_arg, /**< this argument
     return ECMA_VALUE_FALSE;
   }
 
-  ecma_number_t int_num = ecma_number_trunc (num);
+  ecma_number_t int_num;
+  ecma_op_to_integer (arg, &int_num);
 
   if (int_num != num)
   {
@@ -218,7 +221,8 @@ ecma_builtin_number_object_is_safe_integer (ecma_value_t this_arg, /**< this arg
 
   return ECMA_VALUE_FALSE;
 } /* ecma_builtin_number_object_is_safe_integer */
-#endif /* ENABLED (JERRY_ES2015_BUILTIN) */
+
+#endif /* ENABLED (JERRY_ES2015) */
 
 /**
  * @}

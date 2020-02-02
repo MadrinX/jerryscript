@@ -325,8 +325,8 @@ typedef enum
   OPT_EXEC_SNAP,
   OPT_EXEC_SNAP_FUNC,
   OPT_LOG_LEVEL,
-  OPT_ABORT_ON_FAIL,
-  OPT_NO_PROMPT
+  OPT_NO_PROMPT,
+  OPT_CALL_ON_EXIT
 } main_opt_id_t;
 
 /**
@@ -364,12 +364,12 @@ static const cli_opt_t main_opts[] =
                .help = "execute specific function from input snapshot file(s)"),
   CLI_OPT_DEF (.id = OPT_LOG_LEVEL, .longopt = "log-level", .meta = "NUM",
                .help = "set log level (0-3)"),
-  CLI_OPT_DEF (.id = OPT_ABORT_ON_FAIL, .longopt = "abort-on-fail",
-               .help = "segfault on internal failure (instead of non-zero exit code)"),
   CLI_OPT_DEF (.id = OPT_NO_PROMPT, .longopt = "no-prompt",
                .help = "don't print prompt in REPL mode"),
+  CLI_OPT_DEF (.id = OPT_CALL_ON_EXIT, .longopt = "call-on-exit", .meta = "STRING",
+               .help = "invoke the specified function when the process is just about to exit"),
   CLI_OPT_DEF (.id = CLI_OPT_DEFAULT, .meta = "FILE",
-               .help = "input JS file(s)")
+               .help = "input JS file(s) (If file is -, read standard input.)")
 };
 
 /**
@@ -462,6 +462,7 @@ init_engine (jerry_init_flag_t flags, /**< initialized flags for the engine */
   register_js_function ("assert", jerryx_handler_assert);
   register_js_function ("gc", jerryx_handler_gc);
   register_js_function ("print", jerryx_handler_print);
+  register_js_function ("resourceName", jerryx_handler_resource_name);
 } /* init_engine */
 
 int
@@ -490,6 +491,8 @@ main (int argc,
   bool is_wait_mode = false;
   bool no_prompt = false;
 
+  const char *exit_cb = NULL;
+
   cli_state_t cli_state = cli_init (main_opts, argc - 1, argv + 1);
   for (int id = cli_consume_option (&cli_state); id != CLI_OPT_END; id = cli_consume_option (&cli_state))
   {
@@ -502,7 +505,11 @@ main (int argc,
       }
       case OPT_VERSION:
       {
-        printf ("Version: %d.%d%s\n", JERRY_API_MAJOR_VERSION, JERRY_API_MINOR_VERSION, JERRY_COMMIT_HASH);
+        printf ("Version: %d.%d.%d%s\n",
+                JERRY_API_MAJOR_VERSION,
+                JERRY_API_MINOR_VERSION,
+                JERRY_API_PATCH_VERSION,
+                JERRY_COMMIT_HASH);
         return JERRY_STANDALONE_EXIT_CODE_OK;
       }
       case OPT_MEM_STATS:
@@ -526,6 +533,11 @@ main (int argc,
           jerry_port_default_set_log_level (JERRY_LOG_LEVEL_DEBUG);
           flags |= JERRY_INIT_SHOW_OPCODES;
         }
+        break;
+      }
+      case OPT_CALL_ON_EXIT:
+      {
+        exit_cb = cli_consume_string (&cli_state);
         break;
       }
       case OPT_SHOW_RE_OP:
@@ -622,11 +634,6 @@ main (int argc,
                      argv[0], "Error: invalid value for --log-level: ", cli_state.arg);
 
         jerry_port_default_set_log_level ((jerry_log_level_t) log_level);
-        break;
-      }
-      case OPT_ABORT_ON_FAIL:
-      {
-        jerry_port_default_set_abort_on_fail (true);
         break;
       }
       case OPT_NO_PROMPT:
@@ -861,7 +868,7 @@ main (int argc,
       /* Read a line */
       while (true)
       {
-        if (fread (source_buffer_tail, 1, 1, stdin) != 1 && len == 0)
+        if (fread (source_buffer_tail, 1, 1, stdin) != 1)
         {
           is_done = true;
           break;
@@ -937,6 +944,32 @@ main (int argc,
   }
 
   jerry_release_value (ret_value);
+
+  if (exit_cb != NULL)
+  {
+    jerry_value_t global = jerry_get_global_object ();
+    jerry_value_t fn_str = jerry_create_string ((jerry_char_t *) exit_cb);
+    jerry_value_t callback_fn = jerry_get_property (global, fn_str);
+
+    jerry_release_value (global);
+    jerry_release_value (fn_str);
+
+    if (jerry_value_is_function (callback_fn))
+    {
+      jerry_value_t ret_val = jerry_call_function (callback_fn, jerry_create_undefined (), NULL, 0);
+
+      if (jerry_value_is_error (ret_val))
+      {
+        ret_val = jerry_get_value_from_error (ret_val, true);
+        print_unhandled_exception (ret_val);
+        ret_code = JERRY_STANDALONE_EXIT_CODE_FAIL;
+      }
+
+      jerry_release_value (ret_val);
+    }
+
+    jerry_release_value (callback_fn);
+  }
 
   jerry_cleanup ();
 #if defined (JERRY_EXTERNAL_CONTEXT) && (JERRY_EXTERNAL_CONTEXT == 1)

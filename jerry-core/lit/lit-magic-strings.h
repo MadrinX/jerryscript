@@ -48,6 +48,8 @@ typedef enum
   LIT_INTERNAL_MAGIC_STRING_PROMISE_PROPERTY_REMAINING_ELEMENT, /**< [[RemainingElement]] property */
   LIT_INTERNAL_MAGIC_STRING_ITERATOR_NEXT_INDEX, /**< [[%Iterator%NextIndex]] property */
   LIT_INTERNAL_MAGIC_STRING_MAP_KEY, /**< Property key used when an object is a key in a map object */
+  LIT_INTERNAL_MAGIC_API_INTERNAL, /**< Property key used to add non-visible JS properties from the public API  */
+  LIT_INTERNAL_MAGIC_STRING_ARRAY_PROTOTYPE_VALUES, /**< %ArrayProto_values% intrinsic routine */
   /* List of well known symbols */
   LIT_GLOBAL_SYMBOL_HAS_INSTANCE, /**< @@hasInstance well known symbol */
   LIT_GLOBAL_SYMBOL_IS_CONCAT_SPREADABLE, /**< @@isConcatSpreadable well known symbol */
@@ -69,6 +71,8 @@ typedef enum
   LIT_FIRST_INTERNAL_MAGIC_STRING = LIT_INTERNAL_MAGIC_STRING_NATIVE_POINTER,  /**< first index of internal
                                                                                 *   magic strings */
   LIT_INTERNAL_MAGIC_STRING_CLASS_THIS_BINDING, /**< the this binding of the class constructor */
+  LIT_INTERNAL_MAGIC_STRING_WEAK_REFS, /**< Weak references to the current object */
+  LIT_INTERNAL_MAGIC_STRING_CONTAINER, /**< Literal ID for internal container objects */
   LIT_MAGIC_STRING__COUNT /**< number of magic strings */
 } lit_magic_string_id_t;
 

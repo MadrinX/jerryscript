@@ -33,6 +33,16 @@
  * @{
  */
 
+const char day_names_p[7][3] =
+{
+  "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+};
+
+const char month_names_p[12][3] =
+{
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+};
+
 /**
  * Helper function to get day number from time value.
  *
@@ -57,7 +67,7 @@ ecma_date_day (ecma_number_t time) /**< time value */
  *
  * @return time value within the day
  */
-inline ecma_number_t JERRY_ATTR_ALWAYS_INLINE
+extern inline ecma_number_t JERRY_ATTR_ALWAYS_INLINE
 ecma_date_time_within_day (ecma_number_t time) /**< time value */
 {
   JERRY_ASSERT (!ecma_number_is_nan (time));
@@ -577,17 +587,7 @@ static ecma_value_t
 ecma_date_to_string_format (ecma_number_t datetime_number, /**< datetime */
                             const char *format_p) /**< format buffer */
 {
-  static const char * const day_names_p[8] =
-  {
-    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
-  };
-
-  static const char * const month_names_p[13] =
-  {
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-  };
-
-  const uint32_t date_buffer_length = 34;
+  const uint32_t date_buffer_length = 37;
   JERRY_VLA (lit_utf8_byte_t, date_buffer, date_buffer_length);
 
   lit_utf8_byte_t *dest_p = date_buffer;
@@ -611,7 +611,32 @@ ecma_date_to_string_format (ecma_number_t datetime_number, /**< datetime */
       case LIT_CHAR_UPPERCASE_Y: /* Year. */
       {
         number = (int32_t) ecma_date_year_from_time (datetime_number);
-        number_length = 4;
+
+        if (number >= 100000 || number <= -100000)
+        {
+          number_length = 6;
+        }
+        else if (number >= 10000 || number <= -10000)
+        {
+          number_length = 5;
+        }
+        else
+        {
+          number_length = 4;
+        }
+        break;
+      }
+      case LIT_CHAR_LOWERCASE_Y: /* ISO Year: -000001, 0000, 0001, 9999, +012345 */
+      {
+        number = (int32_t) ecma_date_year_from_time (datetime_number);
+        if (0 <= number && number <= 9999)
+        {
+          number_length = 4;
+        }
+        else
+        {
+          number_length = 6;
+        }
         break;
       }
       case LIT_CHAR_UPPERCASE_M: /* Month. */
@@ -671,7 +696,7 @@ ecma_date_to_string_format (ecma_number_t datetime_number, /**< datetime */
         number_length = 3;
         break;
       }
-      case LIT_CHAR_LOWERCASE_Z: /* Time zone minutes part. */
+      case LIT_CHAR_LOWERCASE_Z: /* Time zone hours part. */
       {
         int32_t time_zone = (int32_t) ecma_date_local_time_zone_adjustment (datetime_number);
 
@@ -691,7 +716,7 @@ ecma_date_to_string_format (ecma_number_t datetime_number, /**< datetime */
       }
       default:
       {
-        JERRY_ASSERT (*format_p == LIT_CHAR_UPPERCASE_Z); /* Time zone seconds part. */
+        JERRY_ASSERT (*format_p == LIT_CHAR_UPPERCASE_Z); /* Time zone minutes part. */
 
         int32_t time_zone = (int32_t) ecma_date_local_time_zone_adjustment (datetime_number);
 
@@ -700,7 +725,7 @@ ecma_date_to_string_format (ecma_number_t datetime_number, /**< datetime */
           time_zone = -time_zone;
         }
 
-        number = time_zone % (int32_t) ECMA_DATE_MS_PER_HOUR;
+        number = time_zone % (int32_t) ECMA_DATE_MS_PER_HOUR / (int32_t) ECMA_DATE_MS_PER_MINUTE;
         number_length = 2;
         break;
       }
@@ -710,18 +735,25 @@ ecma_date_to_string_format (ecma_number_t datetime_number, /**< datetime */
 
     if (str_p != NULL)
     {
-      /* Print string values. */
-      do
-      {
-        *dest_p++ = (lit_utf8_byte_t) *str_p++;
-      }
-      while (*str_p != LIT_CHAR_NULL);
-
+      /* Print string values: month or day name which is always 3 characters */
+      memcpy (dest_p, str_p, 3);
+      dest_p += 3;
       continue;
     }
 
     /* Print right aligned number values. */
     JERRY_ASSERT (number_length > 0);
+
+    if (number < 0)
+    {
+      number = -number;
+      *dest_p++ = '-';
+    }
+    else if (*(format_p - 1) == LIT_CHAR_LOWERCASE_Y && number_length == 6)
+    {
+      /* positive sign is compulsory for extended years */
+      *dest_p++ = '+';
+    }
 
     dest_p += number_length;
     lit_utf8_byte_t *buffer_p = dest_p;
@@ -755,7 +787,7 @@ ecma_value_t
 ecma_date_value_to_string (ecma_number_t datetime_number) /**< datetime */
 {
   datetime_number += ecma_date_local_time_zone_adjustment (datetime_number);
-  return ecma_date_to_string_format (datetime_number, "$W $M $D $Y $h:$m:$s GMT$z:$Z");
+  return ecma_date_to_string_format (datetime_number, "$W $M $D $Y $h:$m:$s GMT$z$Z");
 } /* ecma_date_value_to_string */
 
 /**
@@ -785,7 +817,7 @@ ecma_date_value_to_utc_string (ecma_number_t datetime_number) /**< datetime */
 ecma_value_t
 ecma_date_value_to_iso_string (ecma_number_t datetime_number) /**<datetime */
 {
-  return ecma_date_to_string_format (datetime_number, "$Y-$O-$DT$h:$m:$s.$iZ");
+  return ecma_date_to_string_format (datetime_number, "$y-$O-$DT$h:$m:$s.$iZ");
 } /* ecma_date_value_to_iso_string */
 
 /**

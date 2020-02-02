@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+#include "ecma-arraybuffer-object.h"
+#include "ecma-exceptions.h"
 #include "ecma-dataview-object.h"
 #include "ecma-gc.h"
 
@@ -41,6 +43,7 @@ enum
   ECMA_DATAVIEW_PROTOTYPE_BYTE_OFFSET_GETTER,
   ECMA_DATAVIEW_PROTOTYPE_GET_INT8,
   ECMA_DATAVIEW_PROTOTYPE_GET_UINT8,
+  ECMA_DATAVIEW_PROTOTYPE_GET_UINT8_CLAMPED, /* unused value */
   ECMA_DATAVIEW_PROTOTYPE_GET_INT16,
   ECMA_DATAVIEW_PROTOTYPE_GET_UINT16,
   ECMA_DATAVIEW_PROTOTYPE_GET_INT32,
@@ -51,6 +54,7 @@ enum
 #endif /* ENABLED (JERRY_NUMBER_TYPE_FLOAT64) */
   ECMA_DATAVIEW_PROTOTYPE_SET_INT8,
   ECMA_DATAVIEW_PROTOTYPE_SET_UINT8,
+  ECMA_DATAVIEW_PROTOTYPE_SET_UINT8_CLAMPED, /* unused value */
   ECMA_DATAVIEW_PROTOTYPE_SET_INT16,
   ECMA_DATAVIEW_PROTOTYPE_SET_UINT16,
   ECMA_DATAVIEW_PROTOTYPE_SET_INT32,
@@ -74,23 +78,6 @@ enum
  * \addtogroup dataviewprototype ECMA DataView.prototype object built-in
  * @{
  */
-
-/**
- * Corresponding typedarray mappings for the {get,set}{[U]int, Float}{8, 16, 32, 64} routines
- */
-static const uint8_t ecma_dataview_type_mapping[] =
-{
-  ECMA_BUILTIN_ID_INT8ARRAY,
-  ECMA_BUILTIN_ID_UINT8ARRAY,
-  ECMA_BUILTIN_ID_INT16ARRAY,
-  ECMA_BUILTIN_ID_UINT16ARRAY,
-  ECMA_BUILTIN_ID_INT32ARRAY,
-  ECMA_BUILTIN_ID_UINT32ARRAY,
-  ECMA_BUILTIN_ID_FLOAT32ARRAY,
-#if ENABLED (JERRY_NUMBER_TYPE_FLOAT64)
-  ECMA_BUILTIN_ID_FLOAT64ARRAY,
-#endif /* ENABLED (JERRY_NUMBER_TYPE_FLOAT64) */
-};
 
 /**
  * The DataView.prototype object's {buffer, byteOffset, byteLength} getters
@@ -125,11 +112,20 @@ ecma_builtin_dataview_prototype_object_getters (ecma_value_t this_arg, /**< this
     }
     case ECMA_DATAVIEW_PROTOTYPE_BYTE_LENGTH_GETTER:
     {
+      if (ecma_arraybuffer_is_detached (obj_p->buffer_p))
+      {
+        return ecma_raise_type_error (ECMA_ERR_MSG ("ArrayBuffer has been detached."));
+      }
       return ecma_make_uint32_value (obj_p->header.u.class_prop.u.length);
     }
     default:
     {
       JERRY_ASSERT (builtin_routine_id == ECMA_DATAVIEW_PROTOTYPE_BYTE_OFFSET_GETTER);
+
+      if (ecma_arraybuffer_is_detached (obj_p->buffer_p))
+      {
+        return ecma_raise_type_error (ECMA_ERR_MSG ("ArrayBuffer has been detached."));
+      }
       return ecma_make_uint32_value (obj_p->byte_offset);
     }
   }
@@ -168,9 +164,9 @@ ecma_builtin_dataview_prototype_dispatch_routine (uint16_t builtin_routine_id, /
     case ECMA_DATAVIEW_PROTOTYPE_GET_UINT32:
     {
       ecma_value_t little_endian = arguments_number > 1 ? arguments_list_p[1] : ECMA_VALUE_FALSE;
-      uint8_t type = ecma_dataview_type_mapping[builtin_routine_id - ECMA_DATAVIEW_PROTOTYPE_GET_INT8];
+      ecma_typedarray_type_t id = (ecma_typedarray_type_t) (builtin_routine_id - ECMA_DATAVIEW_PROTOTYPE_GET_INT8);
 
-      return ecma_op_dataview_get_set_view_value (this_arg, byte_offset, little_endian, ECMA_VALUE_EMPTY, type);
+      return ecma_op_dataview_get_set_view_value (this_arg, byte_offset, little_endian, ECMA_VALUE_EMPTY, id);
     }
     case ECMA_DATAVIEW_PROTOTYPE_SET_FLOAT32:
 #if ENABLED (JERRY_NUMBER_TYPE_FLOAT64)
@@ -183,25 +179,25 @@ ecma_builtin_dataview_prototype_dispatch_routine (uint16_t builtin_routine_id, /
     {
       ecma_value_t value_to_set = arguments_number > 1 ? arguments_list_p[1] : ECMA_VALUE_UNDEFINED;
       ecma_value_t little_endian = arguments_number > 2 ? arguments_list_p[2] : ECMA_VALUE_FALSE;
-      uint8_t type = ecma_dataview_type_mapping[builtin_routine_id - ECMA_DATAVIEW_PROTOTYPE_SET_INT8];
+      ecma_typedarray_type_t id = (ecma_typedarray_type_t) (builtin_routine_id - ECMA_DATAVIEW_PROTOTYPE_SET_INT8);
 
-      return ecma_op_dataview_get_set_view_value (this_arg, byte_offset, little_endian, value_to_set, type);
+      return ecma_op_dataview_get_set_view_value (this_arg, byte_offset, little_endian, value_to_set, id);
     }
     case ECMA_DATAVIEW_PROTOTYPE_GET_INT8:
     case ECMA_DATAVIEW_PROTOTYPE_GET_UINT8:
     {
-      uint8_t type = ecma_dataview_type_mapping[builtin_routine_id - ECMA_DATAVIEW_PROTOTYPE_GET_INT8];
+      ecma_typedarray_type_t id = (ecma_typedarray_type_t) (builtin_routine_id - ECMA_DATAVIEW_PROTOTYPE_GET_INT8);
 
-      return ecma_op_dataview_get_set_view_value (this_arg, byte_offset, ECMA_VALUE_FALSE, ECMA_VALUE_EMPTY, type);
+      return ecma_op_dataview_get_set_view_value (this_arg, byte_offset, ECMA_VALUE_FALSE, ECMA_VALUE_EMPTY, id);
     }
     default:
     {
       JERRY_ASSERT (builtin_routine_id == ECMA_DATAVIEW_PROTOTYPE_SET_INT8
                     || builtin_routine_id == ECMA_DATAVIEW_PROTOTYPE_SET_UINT8);
       ecma_value_t value_to_set = arguments_number > 1 ? arguments_list_p[1] : ECMA_VALUE_UNDEFINED;
-      uint8_t type = ecma_dataview_type_mapping[builtin_routine_id - ECMA_DATAVIEW_PROTOTYPE_SET_INT8];
+      ecma_typedarray_type_t id = (ecma_typedarray_type_t) (builtin_routine_id - ECMA_DATAVIEW_PROTOTYPE_SET_INT8);
 
-      return ecma_op_dataview_get_set_view_value (this_arg, byte_offset, ECMA_VALUE_FALSE, value_to_set, type);
+      return ecma_op_dataview_get_set_view_value (this_arg, byte_offset, ECMA_VALUE_FALSE, value_to_set, id);
     }
   }
 } /* ecma_builtin_dataview_prototype_dispatch_routine */

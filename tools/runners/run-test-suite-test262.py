@@ -15,10 +15,12 @@
 # limitations under the License.
 
 from __future__ import print_function
-import sys
 import os
-import subprocess
 import shutil
+import subprocess
+import sys
+
+import util
 
 def get_platform_cmd_prefix():
     if sys.platform == 'win32':
@@ -42,11 +44,17 @@ def run_test262_tests(runtime, engine, path_to_test262):
     if os.path.isdir(path_to_remove):
         shutil.rmtree(path_to_remove)
 
+    if sys.platform == 'win32':
+        original_timezone = util.get_timezone()
+        util.set_sighdl_to_reset_timezone(original_timezone)
+        util.set_timezone('Pacific Standard Time')
+
     proc = subprocess.Popen(get_platform_cmd_prefix() +
                             [os.path.join(path_to_test262, 'tools/packaging/test262.py'),
                              '--command', (runtime + ' ' + engine).strip(),
                              '--tests', path_to_test262,
                              '--summary'],
+                            universal_newlines=True,
                             stdout=subprocess.PIPE)
 
     return_code = 0
@@ -72,6 +80,10 @@ def run_test262_tests(runtime, engine, path_to_test262):
                     return_code = 1
 
     proc.wait()
+
+    if sys.platform == 'win32':
+        util.set_timezone(original_timezone)
+
     return return_code
 
 

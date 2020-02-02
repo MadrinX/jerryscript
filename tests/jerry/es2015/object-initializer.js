@@ -62,4 +62,16 @@ default:
   ({ true: true });
   ({ 13: 13 });
   ({ "x": "x" });
+
+  var get = 8;
+  var set = 12;
+  var o = ({ get, set });
+
+  assert(o.get == 8);
+  assert(o.set == 12);
 }
+
+var obj = { get() { return 5; }, set() { return 6; } };
+
+assert (obj.get() === 5);
+assert (obj.set() === 6);
